@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -14,10 +15,14 @@ import (
 
 // configuration
 const (
-	UDPListenAddr    = "0.0.0.0:24454"
-	HTTPListenAddr   = "0.0.0.0:8080"
 	PacketTypeVoice  = 0xFF
 	DefaultVoicePort = "24454"
+)
+
+// CLI flags
+var (
+	udpListenAddr  string
+	httpListenAddr string
 )
 
 // WebhookPayload matches the JSON sent by mc-router
@@ -49,6 +54,11 @@ var (
 	sessions = make(map[string]*Session)
 	sessMu   sync.Mutex
 )
+
+func init() {
+	flag.StringVar(&udpListenAddr, "udp", "0.0.0.0:24454", "UDP listen address for voice traffic")
+	flag.StringVar(&httpListenAddr, "http", "0.0.0.0:8080", "HTTP listen address for webhooks")
+}
 
 // convert server TCP address from mc-router to the Simple Voice Chat UDP address
 func transformBackendAddress(tcpAddress string) string {
@@ -95,22 +105,24 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
+
 	go func() {
 		http.HandleFunc("/", handleWebhook)
-		log.Printf("HTTP Webhook Listener running on %s", HTTPListenAddr)
-		if err := http.ListenAndServe(HTTPListenAddr, nil); err != nil {
+		log.Printf("HTTP Webhook Listener running on %s", httpListenAddr)
+		if err := http.ListenAndServe(httpListenAddr, nil); err != nil {
 			log.Fatalf("HTTP Server failed: %v", err)
 		}
 	}()
 
-	mainAddr, _ := net.ResolveUDPAddr("udp", UDPListenAddr)
+	mainAddr, _ := net.ResolveUDPAddr("udp", udpListenAddr)
 	mainConn, err := net.ListenUDP("udp", mainAddr)
 	if err != nil {
 		log.Fatalf("UDP Listener failed: %v", err)
 	}
 	defer mainConn.Close()
 
-	log.Printf("UDP Voice Router listening on %s", UDPListenAddr)
+	log.Printf("UDP Voice Router listening on %s", udpListenAddr)
 
 	buffer := make([]byte, 4096)
 
